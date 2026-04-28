@@ -1,6 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from app import crud, schemas
@@ -45,7 +45,7 @@ def test_health_check():
     assert "status" in response.json()
     from app.database import engine
     with engine.connect() as conn:
-        conn.execute("SELECT 1")
+        conn.execute(text("SELECT 1"))
     assert response.json()["status"] == "healthy"
 
 
