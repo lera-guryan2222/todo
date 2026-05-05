@@ -42,10 +42,12 @@ jobs:
         run: |
           cd backend
           pip install -r requirements.txt
+          pip install flake8
 
       - name: Run linter
         run: |
-          flake8 backend/app/  
+          cd backend
+          flake8 app/ --max-line-length=120 --ignore=E203,W503
 
   test:
     runs-on: ubuntu-latest
@@ -63,28 +65,65 @@ jobs:
         run: |
           cd backend
           pip install -r requirements.txt
+          pip install pytest pytest-cov
 
       - name: Run tests with coverage
-        run: pytest backend/tests/ -v
+        run: |
+          cd backend
+          pytest tests/ -v --cov=app --cov-report=html --cov-report=term --cov-fail-under=50
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: htmlcov/   
+          path: backend/htmlcov/
 
   docker_build:
     runs-on: ubuntu-latest
     needs: [test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-    - uses: actions/checkout@v4
-    - uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
-    - uses: docker/build-push-action@v5
-      with:
-        context: ./backend
-        push: true
-        tags: ${{ secrets.DOCKER_USERNAME }}/todo-list-api:latest
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: |
+          cd backend
+          docker build -t ${{ env.DOCKER_IMAGE }}:${{ github.sha }} -t ${{ env.DOCKER_IMAGE }}:latest .
+
+      - name: Save Docker image to file
+        run: |
+          docker save ${{ env.DOCKER_IMAGE }}:${{ github.sha }} -o image.tar
+
+      - name: Upload Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: image.tar
+
+  docker_push:
+    runs-on: ubuntu-latest
+    needs: [docker_build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Load Docker image
+        run: docker load -i image.tar
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Push Docker image
+        run: |
+          docker push ${{ env.DOCKER_IMAGE }}:${{ github.sha }}
+          docker push ${{ env.DOCKER_IMAGE }}:latest
