@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  DOCKER_IMAGE: guriian/todo-list-api
+  DOCKER_IMAGE: guriian/todo
 
 jobs:
   build:
